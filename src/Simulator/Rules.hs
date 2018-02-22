@@ -14,11 +14,11 @@ import           Data.Bifunctor   ( bimap, first )
 
 import           Simulator.Types
 
-determinant :: Matrix -> Int
-determinant (Matrix (Vector a b c)
-                    (Vector d e f)
-                    (Vector g h i)) =
-  a * (e * i - h * f) - d * (b * i - h * c) + g * (b * f - e * c)
+-- determinant :: Matrix -> Int
+-- determinant (Matrix (Vector a b c)
+--                     (Vector d e f)
+--                     (Vector g h i)) =
+--   a * (e * i - h * f) - d * (b * i - h * c) + g * (b * f - e * c)
 
 data Rule = Rule { axis        :: !Vector
                  , layer       :: !Int
@@ -36,12 +36,16 @@ instance Show Rule
           -1 -> (invV axis, invO orientation)
 
 data Brick = Brick { brickPosition :: !Vector
-                   , brickColors   :: ![(Vector, Color)]
+                   , brickFace1    :: !(Vector, Color)
+                   , brickFace2    :: !(Vector, Color)
+                   , brickFace3    :: !(Vector, Color)
                    } deriving Eq
 
 instance Show Brick
   where
-    show (Brick pos cs) = show posCs ++ ", " ++ show cs
+    show (Brick pos face1 face2 face3)
+      = show posCs ++ ", " ++ show face1 ++ ", " ++ show face2
+     ++ if snd face3 == Black then "" else (", " ++ show face3)
       where
         posCs = filter (/= Black)
               . map toColor
@@ -64,9 +68,11 @@ solution = corners ++ edges
 
 genBricks :: Generator -> [Brick]
 genBricks gen = [ Brick (foldl1 addVV vs)
-                        (map (\v -> (v, color v)) vs)
+                        (f1, color f1)
+                        (f2, color f2)
+                        (if null fs then (zero, Black) else (head fs, color . head $ fs))
                 | (ops, axes) <- gen
-                , let vs = zipWith ($) ops axes
+                , let vs@(f1 : f2 : fs) = zipWith ($) ops axes
                 ]
 
 type Generator = [([Vector -> Vector], [Vector])]
@@ -102,16 +108,18 @@ rules = [ Rule a l orientation (buildRotation a orientation)
         ]
 
 applyRule :: Rule -> Brick -> Brick
-applyRule (Rule a l _ r) b@(Brick pos cs)
+applyRule (Rule a l _ r) b@(Brick pos face1 face2 face3)
     | pos `multVV` a == l = Brick (r `multMV` pos)
-                                  (map (first (r `multMV`)) cs)
+                                  (first (r `multMV`) face1)
+                                  (first (r `multMV`) face2)
+                                  (first (r `multMV`) face3)
     | otherwise = b
 
-getRotationAxis :: Matrix -> Vector
-getRotationAxis (Matrix (Vector a b c)
-                        (Vector d e f)
-                        (Vector g h i)) =
-                Vector (h - f) (c - g) (d - b)
+-- getRotationAxis :: Matrix -> Vector
+-- getRotationAxis (Matrix (Vector a b c)
+--                         (Vector d e f)
+--                         (Vector g h i)) =
+--                 Vector (h - f) (c - g) (d - b)
 
 -- faceColors :: [Brick] -> Vector -> Vector -> [Color]
 -- faceColors cube face up = []

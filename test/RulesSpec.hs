@@ -33,8 +33,13 @@ spec = describe "Check rules" $
               , ([Blue,Orange], [(Orange,Orange),(Blue,Blue)])
               , ([Green,White], [(Green,Orange),(White,White)])
               ]
-           toBrick ls ps = Brick (foldl1 addVV (map colorToVector ls))
-                                 (map (\(lhs,rhs) -> (colorToVector lhs, rhs)) ps) 
+           conv p = (colorToVector . fst $ p, snd p) 
+           toBrick ls (p1 : p2 : ps)
+               = Brick (foldl1 addVV (map colorToVector ls))
+                       (conv p1) 
+                       (conv p2) 
+                       (if null ps then (zero, Black) else (conv . head $ ps))
            
            cube'' = map (uncurry toBrick) out
+       mapM print cube'
        cube' `shouldBe` cube''

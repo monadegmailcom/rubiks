@@ -24,13 +24,14 @@ multVV (Vector a1 a2 a3) (Vector b1 b2 b3) = a1*b1 + a2*b2 + a3*b3
 addVV :: Vector -> Vector -> Vector
 addVV (Vector a1 a2 a3) (Vector b1 b2 b3) = Vector (a1+b1) (a2+b2) (a3+b3)
 
-red, blue, orange, yellow, green, white :: Vector
+red, blue, orange, yellow, green, white, zero :: Vector
 blue = Vector 1 0 0
 white = Vector 0 1 0
 red = Vector 0 0 1
 green = invV blue
 yellow = invV white
 orange = invV red
+zero = Vector 0 0 0
 
 colors :: [Vector]
 colors = [blue, white, red]
@@ -43,7 +44,7 @@ color :: Vector -> Color
 color v = maybe Black snd . find ((== v) . fst) $ colorMapping
 
 colorToVector :: Color -> Vector
-colorToVector c = maybe (Vector 0 0 0) fst . find ((== c) . snd) $ colorMapping
+colorToVector c = maybe zero fst . find ((== c) . snd) $ colorMapping
 
 components :: Vector -> [(Int, Vector)]
 components v = zip components colors
