@@ -1,98 +1,24 @@
-{-# LANGUAGE LambdaCase #-}
-
 module Simulator.Rules
-    ( Brick(..)
-    , Rule(..)
+    ( Rule(..)
     , applyRule
-    , corners
-    , edges
-    , solution
-    , rules
-    ) where
+    , applyRules
+    , rotR, rotR', rotB, rotB', rotO, rotO', rotY, rotY', rotG, rotG', rotW
+    , rotW') where
 
-import           Data.Bifunctor   ( bimap, first )
+import Simulator.Cube
+import Simulator.Types
 
-import           Simulator.Types
+-- two orientations
+data Orientation = Clockwise | CounterClockwise
 
--- determinant :: Matrix -> Int
--- determinant (Matrix (Vector a b c)
---                     (Vector d e f)
---                     (Vector g h i)) =
---   a * (e * i - h * f) - d * (b * i - h * c) + g * (b * f - e * c)
-
-data Rule = Rule { axis        :: !Vector
-                 , layer       :: !Int
-                 , orientation :: !Orientation
-                 , rotation    :: !Matrix
-                 }
-
-instance Show Rule
-  where
-    show (Rule axis layer orientation _) =
-      show axis' ++ show orientation'
-      where
-        (axis', orientation') = case layer of
-          1 -> (axis, orientation)
-          -1 -> (invV axis, invO orientation)
-
-data Brick = Brick { brickPosition :: !Vector
-                   , brickFace1    :: !(Vector, Color)
-                   , brickFace2    :: !(Vector, Color)
-                   , brickFace3    :: !(Vector, Color)
-                   } deriving Eq
-
-instance Show Brick
-  where
-    show (Brick pos face1 face2 face3)
-      = show posCs ++ ", " ++ show face1 ++ ", " ++ show face2
-     ++ if snd face3 == Black then "" else (", " ++ show face3)
-      where
-        posCs = filter (/= Black)
-              . map toColor
-              . components
-              $ pos
-        toColor (c, v) = case c of
-            1 -> color v
-            -1 -> color . invV $ v
-            _ -> Black
-
-ops :: [Vector -> Vector]
-ops = [id, invV]
-
-corners, edges :: [Brick]
-corners = genBricks cornerGenerator
-edges = genBricks edgeGenerator
-
-solution :: [Brick]
-solution = corners ++ edges
-
-genBricks :: Generator -> [Brick]
-genBricks gen = [ Brick (foldl1 addVV vs)
-                        (f1, color f1)
-                        (f2, color f2)
-                        (if null fs then (zero, Black) else (head fs, color . head $ fs))
-                | (ops, axes) <- gen
-                , let vs@(f1 : f2 : fs) = zipWith ($) ops axes
-                ]
-
-type Generator = [([Vector -> Vector], [Vector])]
-
-cornerGenerator :: Generator
-cornerGenerator = [([op1, op2, op3], colors)
-                  | op1 <- ops, op2 <- ops, op3 <- ops
-                  ]
-
-edgeGenerator :: Generator
-edgeGenerator = [([op, invV . op], [c1, c2])
-                | op <- ops
-                , c1 <- colors, c2 <- colors, c2 /= c1
-                ]
+-- build the rotation matrix for clockwise and counterclockwise rotations with
+-- given axis. Note: only the angles -pi/2 and pi/2 are needed.
 buildRotation :: Vector -> Orientation -> Matrix
 buildRotation (Vector x y z) orientation =
-    (sin orientation `multSM` ux) `addMM` uut
+    (sin' orientation `msm` ux) `amm` uut
   where -- see https://en.wikipedia.org/wiki/Rotation_matrix
-    sin Clockwise = -1 -- -pi/2
-    sin CounterClockwise = 1 -- pi/2
+    sin' Clockwise = -1 -- -pi/2
+    sin' CounterClockwise = 1 -- pi/2
     uut = Matrix (Vector (x * x) (x * y) (x * z))
                  (Vector (x * y) (y * y) (y * z))
                  (Vector (x * z) (y * z) (z * z))
@@ -100,29 +26,52 @@ buildRotation (Vector x y z) orientation =
                 (Vector z 0 (-x))
                 (Vector (-y) x 0)
 
+-- rule to apply to the cube/pieces, the axis points
+-- in the direction of the cube's side, which is rotates.
+data Rule = Rule { ruleAxis     :: !Vector
+                 , ruleRotation :: !Matrix
+                 }
+
+-- generate all 12 different rules
 rules :: [Rule]
-rules = [ Rule a l orientation (buildRotation a orientation)
-        | a <- colors
+rules = [ Rule a (buildRotation a orientation)
+        | a <- [red, blue, orange, yellow, green, white]
         , orientation <- [Clockwise, CounterClockwise]
-        , l <- [1,-1]
         ]
 
+-- the ticked rotations are counter clockwise
+rotR, rotR', rotB, rotB', rotO, rotO', rotY, rotY', rotG, rotG', rotW, rotW'
+    :: Rule
+rotR = rules !! 0
+rotR' = rules !! 1
+rotB = rules !! 2
+rotB' = rules !! 3
+rotO = rules !! 4
+rotO' = rules !! 5
+rotY = rules !! 6
+rotY' = rules !! 7
+rotG = rules !! 8
+rotG' = rules !! 9
+rotW = rules !! 10
+rotW' = rules !! 11
+
+-- apply the rule to a brick
 applyRule :: Rule -> Brick -> Brick
-applyRule (Rule a l _ r) b@(Brick pos face1 face2 face3)
-    | pos `multVV` a == l = Brick (r `multMV` pos)
-                                  (first (r `multMV`) face1)
-                                  (first (r `multMV`) face2)
-                                  (first (r `multMV`) face3)
+applyRule (Rule a r) b@(Brick pos piece)
+    | pos `mvv` a == 1 = case piece of
+        CornerPiece f1 f2 f3 ->
+            Brick pos' (CornerPiece (rotateFace f1)
+                                    (rotateFace f2)
+                                    (rotateFace f3))
+        EdgePiece f1 f2 ->
+            Brick pos' (EdgePiece (rotateFace f1)
+                                  (rotateFace f2))
     | otherwise = b
+  where
+    pos' = r `mmv` pos
+    rotateFace (Face c d) = Face c (r `mmv` d)
 
--- getRotationAxis :: Matrix -> Vector
--- getRotationAxis (Matrix (Vector a b c)
---                         (Vector d e f)
---                         (Vector g h i)) =
---                 Vector (h - f) (c - g) (d - b)
+-- apply rules to the cube.
+applyRules :: Cube -> [Rule] -> Cube
+applyRules = foldl (\bs r -> map (applyRule r) bs)
 
--- faceColors :: [Brick] -> Vector -> Vector -> [Color]
--- faceColors cube face up = []
---   where
---     faceBricks = filter isFace cube
---     isFace brick = face `multVV` (brickPosition brick) == 1
